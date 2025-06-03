@@ -1,9 +1,13 @@
+#this command clears the environment
+rm(list = ls(all = TRUE))
+
 #first we read in all of our packages
 library(haven) 
 library(sf)
 library(raster) 
 library(dplyr) 
 library(ggplot2) 
+library(viridis)
 library(tidyr) 
 library(openxlsx)
 library(writexl)
@@ -22,7 +26,6 @@ library(beepr)
 #read in data
 PR <- read_dta('/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETPR71DT/ETPR71FL.DTA') #load in household member microdata
 BR <- read_dta("/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETBR71DT/ETBR71FL.DTA") #load in birth microdata
-IR <- read_dta("/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETIR71/ETIR71.DAT") #load in individual microdata
 KR <- read_dta('/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETKR71DT/ETKR71FL.DTA') #load in child microdata
 SF <- read_sf("/Users/matthewnicholson/SCIFAA/ethiopia shapefile regions/Eth_Region_2013.shp") #load in country shapefile with state-level data
 CV <- read_sf('/Users/matthewnicholson/SCIFAA/ethiopia health facilities/hotosm_eth_health_facilities_points_shp.shp') #load in shapefile of desired spatial covariate
@@ -82,7 +85,7 @@ BRdata <- BRdata %>%
 
 BRdata_CMORT <- (BRdata[, c("v021", "v022","v024", "v025", "v005", "v008","v011", 
                             "b3", "b7", "v106", "v190", "child_sex", "mo_age_at_birth", 
-                            "birth_order", "prev_bint","birth_size", state_var)]) #account for deprecated naming conventions
+                            "birth_order", "prev_bint","birth_size")])
 
 # NNMR, PNNMR, IMR, CMR & U5MR (neonatal mort, perinatal mort, infant mort, childhood mort, under 5 mort)
 # TABLES 8.1, 8.2 and 8.3
@@ -130,23 +133,23 @@ write.xlsx(CHMORT, "Tables_child_mort_ethiopia_2016.xlsx", asTable = TRUE, appen
 BRdata_CMORT_state <- BRdata %>% 
   select(v021, v022, v024, v025, v005, v008, v011, # Subset
          b3, b7, v106, v190, child_sex, mo_age_at_birth, 
-         birth_order, prev_bint, birth_size, state) %>%
-  filter(!is.na(state) & !is.na(v021) & !is.na(v022) & !is.na(v024) & !is.na(v025)) # Remove NA
+         birth_order, prev_bint, birth_size) %>%
+  filter(!is.na(v021) & !is.na(v022) & !is.na(v024) & !is.na(v025)) # Remove NA
 
-res_state <- as.data.frame(chmort(BRdata_CMORT_state, Class = "state", Period = 120)) # Create chmort table by state
+res_state <- as.data.frame(chmort(BRdata_CMORT_state, Class = "v024", Period = 120)) # Create chmort table by region
 
-write.xlsx(res_state, "Tables_child_mort_by_state_ethiopia_2016.xlsx", asTable = TRUE, append = TRUE, overwrite = FALSE) # Write to Excel
+write.xlsx(res_state, "Tables_child_mort_by_region_ethiopia_2016.xlsx", asTable = TRUE, append = TRUE, overwrite = FALSE) # Write to Excel
 
 ####################################################################################################################################################
 # Now that we have calculated some key mortality indicators by state, we will 
 # calculate the weighted mean of wealth index by state and the gini coefficient
 PRdata_gini <- select(PR,hv005, hv012, hv024, hv025, hv101, hv270, hv271)
 
-calc_gini <- function(Data.Name, Class = NULL){
+calc_gini <- function(PRdata_gini, Class = NULL){
   
   if (is.null(Class)){
     
-    Dat <- Data.Name
+    Dat <- PRdata_gini
     # Keep one case per household (e.g. hvidx=1 or hv101=1 or hvidx=hv003) in households with at least one de jure member
     Dat <- Dat %>% filter(hv101==1 & hv012>0) %>%
       mutate(cases=hv012*hv005/1000000)   # Each household has hv012 de jure members
@@ -197,16 +200,16 @@ calc_gini <- function(Data.Name, Class = NULL){
     
   } else {
     
-    Data.Name[[Class]] <- haven::as_factor(Data.Name[[Class]])
-    Data.Name$DomID  <- c(as.numeric(Data.Name[[Class]]))
+    PRdata_gini[[Class]] <- haven::as_factor(PRdata_gini[[Class]])
+    PRdata_gini$DomID  <- c(as.numeric(PRdata_gini[[Class]]))
     
-    RESULTS <- matrix(0, nrow = max(as.numeric(Data.Name$DomID)), ncol = 2)
+    RESULTS <- matrix(0, nrow = max(as.numeric(PRdata_gini$DomID)), ncol = 2)
     dimnames(RESULTS) <- list(NULL, c("Class", "Gini"))
     RESULTS <- as.data.frame(RESULTS)
     
-    for (j in 1:(max(as.numeric(Data.Name$DomID)))) {
+    for (j in 1:(max(as.numeric(PRdata_gini$DomID)))) {
       
-      Dat = Data.Name[Data.Name$DomID == j, ]
+      Dat = PRdata_gini[PRdata_gini$DomID == j, ]
       
       Dat <- Dat %>% filter(hv101==1 & hv012>0) %>%
         mutate(cases=hv012*hv005/1000000)   # Each household has hv012 de jure members
@@ -270,10 +273,47 @@ weighted_mean_by_region <- PR %>%
   ungroup()
 
 write.xlsx(weighted_mean_by_region, "Wealth_by_region_Ethiopia_2016.xlsx", append = TRUE)
-
+#tells us the code is done
+beep()
 ####################################################################################################################################################
 # Now that we have all of our statistics calculated and our shapefiles are loaded in,
 # we are going to make some maps! For this project, I want a map of wealth by region, a 
 # map of inequality by region, and a map of mortality by region. This will be helpful in understanding
 # how health and wealth are inter-related spatially!
 
+#read in our gini by region file
+gini_by_region <- read.xlsx("/Users/matthewnicholson/SCIFAA/GINI_by_region_Ethiopia_2016.xlsx")
+
+# first, lets edit our shapefile a bit as it contains unwanted information
+# it is always best to only work with what you need, which, in this case, is 
+# region and geometry 
+# another thing to pay attention to is any difference in labelling between your shape
+# file and your own table
+# run str(SF$region) to check the labels and check the excel table for consistency
+SF <- SF %>% 
+  select(-c("REG_P_CODE","REG_Pcode", "HRname", "HRpcode", "HRparent")) %>% 
+  rename(region = REGIONNAME) %>% 
+  left_join(gini_by_region, by = "region") %>% 
+  mutate(Gini = as.numeric(Gini))
+
+# get centroids for labelling
+SF <- SF %>% 
+  mutate(centroid = st_centroid(geometry))
+
+# create the plot 
+ggplot(data = SF) +
+  geom_sf(aes(fill = Gini), color = "white") +
+  geom_sf_text(aes(label = region, geometry = centroid, color = "black"),
+               size = 3,
+               check_overlap = TRUE) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "bottom") +
+  scale_fill_viridis_c(option = "viridis", direction = -1, 
+                       limits = c(0, 1), 
+                       breaks = seq(0, 1, by = 0.2)) +
+  scale_color_identity() +
+  labs(title = "Wealth inequality by region in Ethiopia (2016)",
+       fill = "GINI coefficient")
+
+# now we will plot mean wealth by region, this requires that we load the shapefile again due to the changes we made earlier
