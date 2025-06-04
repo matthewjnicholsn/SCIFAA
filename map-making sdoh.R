@@ -290,18 +290,18 @@ gini_by_region <- read.xlsx("/Users/matthewnicholson/SCIFAA/GINI_by_region_Ethio
 # another thing to pay attention to is any difference in labelling between your shape
 # file and your own table
 # run str(SF$region) to check the labels and check the excel table for consistency
-SF <- SF %>% 
+SF1 <- SF %>% 
   select(-c("REG_P_CODE","REG_Pcode", "HRname", "HRpcode", "HRparent")) %>% 
   rename(region = REGIONNAME) %>% 
   left_join(gini_by_region, by = "region") %>% 
-  mutate(Gini = as.numeric(Gini))
-
-# get centroids for labelling
-SF <- SF %>% 
+  mutate(Gini = as.numeric(Gini)) %>% 
   mutate(centroid = st_centroid(geometry))
+# get centroids for labelling
+
+
 
 # create the plot 
-ggplot(data = SF) +
+p1 <- ggplot(data = SF1) +
   geom_sf(aes(fill = Gini), color = "white") +
   geom_sf_text(aes(label = region, geometry = centroid, color = "black"),
                size = 3,
@@ -316,4 +316,87 @@ ggplot(data = SF) +
   labs(title = "Wealth inequality by region in Ethiopia (2016)",
        fill = "GINI coefficient")
 
-# now we will plot mean wealth by region, this requires that we load the shapefile again due to the changes we made earlier
+# save the plot
+ggsave(filename = "Wealth_inequality_by_region_in_Ethiopia_2016.png", plot = p1)
+
+# now we will plot mean wealth by region
+
+#load mean wealth index by region
+wealth_by_region <- read.xlsx("/Users/matthewnicholson/SCIFAA/Wealth_by_region_Ethiopia_2016.xlsx")
+
+#modify shapefile
+SF2 <- SF %>% 
+  select(-c("REG_P_CODE","REG_Pcode", "HRname", "HRpcode", "HRparent")) %>% 
+  rename(region = REGIONNAME) %>% 
+  left_join(wealth_by_region, by = "region") %>% 
+  mutate(weighted_mean_wealth = as.numeric(weighted_mean_wealth)) %>% 
+  mutate(centroid = st_centroid(geometry))
+
+#create the plot
+p2 <- ggplot(data = SF2) +
+  geom_sf(aes(fill = weighted_mean_wealth), color = "white") +
+  geom_sf_text(aes(label = region, geometry = centroid, color = "black"),
+               size = 3,
+               check_overlap = TRUE) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "bottom") +
+  scale_fill_viridis_c(option = "viridis", direction = -1, 
+                       limits = c(1, 5), 
+                       breaks = seq(1, 5, by = 1)) +
+  scale_color_identity() +
+  labs(title = "Wealth distribution by region in Ethiopia (2016)",
+       fill = "Mean wealth index (1-5)")
+
+# save the plot
+ggsave(filename = "Wealth_distribution_by_region_in_Ethiopia_2016.png", plot = p2)
+
+# now we will plot childhood mortality by region
+# will resolve the issue of actually using the excel table created later
+
+cmort_by_region <- data.frame(
+  region = c("Tigray", "Afar", "Amhara", "Oromia", "Somali", 
+             "Beneshangul Gumu", "SNNPR", "Gambela", "Hareri", 
+             "Addis Ababa", "Dire Dawa"),
+  u5mort = c(58.63, 124.98, 85.16, 78.66, 94.1, 
+             97.73, 88.31, 88.02, 72.39, 
+             38.57, 92.68)
+)
+
+#modify shapefile
+SF3 <- SF %>% 
+  select(-c("REG_P_CODE","REG_Pcode", "HRname", "HRpcode", "HRparent")) %>% 
+  rename(region = REGIONNAME) %>% 
+  left_join(cmort_by_region, by = "region") %>% 
+  mutate(u5mort = as.numeric(u5mort)) %>% 
+  mutate(centroid = st_centroid(geometry))
+
+#create the plot
+p3 <- ggplot(data = SF3) +
+  geom_sf(aes(fill = u5mort), color = "white") +
+  geom_sf_text(aes(label = region, geometry = centroid, color = "black"),
+               size = 3,
+               check_overlap = TRUE) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "bottom") +
+  scale_fill_viridis_c(option = "viridis", direction =  -1) +
+  scale_color_identity() +
+  labs(title = "Under 5 Mortality in Ethiopia (2016)",
+       fill = "Under 5 mortality per 1000")
+
+# save the plot
+ggsave(filename = "Under_5_Mortality_by_region_Ethiopia_2016.png", plot = p3)
+
+# now want to try to create a map of health outposts and filter them by region
+ggplot() +
+  geom_sf(data = SF, fill = "lightgrey", color = "black") +  # Outline of Ethiopia with regions
+  geom_sf(data = CV, color = "red", size = 2) +  # Health outposts
+  theme_minimal() +
+  labs(title = "Health Outposts in Ethiopia",
+       subtitle = "Overlay of Health Outposts on Regional Map",
+       x = "Longitude",
+       y = "Latitude")
+  
+
+  
