@@ -389,14 +389,39 @@ p3 <- ggplot(data = SF3) +
 ggsave(filename = "Under_5_Mortality_by_region_Ethiopia_2016.png", plot = p3)
 
 # now want to try to create a map of health outposts and filter them by region
-ggplot() +
+#check that the coordinate systems are the same
+CV <- st_transform(CV, st_crs(SF))
+count_outposts <- CV %>%
+  st_join(SF, join = st_within) %>%
+  group_by(REGIONNAME) %>%
+  summarise(count = n(), .groups = 'drop')
+
+
+p4 <- ggplot() +
   geom_sf(data = SF, fill = "lightgrey", color = "black") +  # Outline of Ethiopia with regions
-  geom_sf(data = CV, color = "red", size = 2) +  # Health outposts
+  geom_sf(data = CV, color = "red", size = 0.25) +  # Health outposts
   theme_minimal() +
   labs(title = "Health Outposts in Ethiopia",
        subtitle = "Overlay of Health Outposts on Regional Map",
        x = "Longitude",
        y = "Latitude")
+
+#calculate how many amenities are in each region and plot this too
+
+p5 <- ggplot(data = count_outposts) +
+  geom_sf(aes(fill = count), color = "white") +
+  geom_sf_text(aes(label = region, geometry = centroid, color = "black"),
+               size = 3,
+               check_overlap = TRUE) +
+  theme_void() +
+  theme(plot.title = element_text(hjust = 0.5)) +
+  theme(legend.position = "bottom") +
+  scale_fill_viridis_c(option = "viridis", direction =  -1) +
+  scale_color_identity() +
+  labs(title = "Health Outposts by Region in Ethiopia (2016)",
+       fill = "Number of Health Outposts")
   
+
+
 
   
