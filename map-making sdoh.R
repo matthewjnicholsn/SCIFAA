@@ -16,6 +16,7 @@ library(sjlabelled) #for fx set_label
 library(DHS.rates) #for functions like chmort
 library(data.table) #for tables from mort calculations
 library(beepr)
+library(stringr)
 
 # in this script, we will calculate childhood mortality, GINI coefficient, 
 # and mean wealth index by state. We will then create some helpful plots to visualize
@@ -263,6 +264,18 @@ calc_gini <- function(PRdata_gini, Class = NULL){
 ph_gini_results <- as.data.frame(rbind(calc_gini(PRdata_gini),
                                        calc_gini(PRdata_gini,Class="hv024")))
 
+ph_gini_results <- ph_gini_results %>%
+  rename(region = Class, Gini = Gini) %>%
+  mutate(
+    region = case_when(
+      region == "benishangul" ~ "Beneshangul Gumu",
+      TRUE ~ str_to_title(region)  # Convert to title case
+    )
+  ) %>%
+  select(region, Gini) %>%
+  arrange(region) %>% 
+  filter(!row_number() %in% 8)
+
 write.xlsx(ph_gini_results, "GINI_by_region_Ethiopia_2016.xlsx", append=TRUE)
 
 # Calculate mean wealth index by region
@@ -270,7 +283,22 @@ write.xlsx(ph_gini_results, "GINI_by_region_Ethiopia_2016.xlsx", append=TRUE)
 weighted_mean_by_region <- PR %>%
   group_by(hv024) %>%
   summarise(weighted_mean_wealth = weighted.mean(hv270, w = hv005, na.rm = TRUE)) %>%
-  ungroup()
+  ungroup() %>% 
+  rename(region = hv024) %>% 
+  mutate(region = case_when(
+    region == 1 ~ "Tigray",
+    region == 2 ~ "Afar",
+    region == 3 ~ "Amhara",
+    region == 4 ~ "Oromia",
+    region == 5 ~ "Somali",
+    region == 6 ~ "Beneshangul Gumu",
+    region == 7 ~ "SNNPR",
+    region == 8 ~ "Gambela",
+    region == 9 ~ "Hareri",
+    region == 10 ~ "Addis Ababa",
+    region == 11 ~ "Dire Dawa",
+    TRUE ~ as.character(region)  # Fallback for any unexpected values
+  )) 
 
 write.xlsx(weighted_mean_by_region, "Wealth_by_region_Ethiopia_2016.xlsx", append = TRUE)
 #tells us the code is done
@@ -389,16 +417,20 @@ p3 <- ggplot(data = SF3) +
 ggsave(filename = "Under_5_Mortality_by_region_Ethiopia_2016.png", plot = p3)
 
 # now want to try to create a map of health outposts and filter them by region
+
+#modify shapefile
+SF4 <- SF %>% 
+  select(-c("REG_P_CODE","REG_Pcode", "HRname", "HRpcode", "HRparent")) %>% 
+  rename(region = REGIONNAME) %>% 
+  left_join(cmort_by_region, by = "region") %>% 
+  mutate(u5mort = as.numeric(u5mort)) %>% 
+  mutate(centroid = st_centroid(geometry))
 #check that the coordinate systems are the same
-CV <- st_transform(CV, st_crs(SF))
-count_outposts <- CV %>%
-  st_join(SF, join = st_within) %>%
-  group_by(REGIONNAME) %>%
-  summarise(count = n(), .groups = 'drop')
+CV <- st_transform(CV, st_crs(SF4))
 
 
 p4 <- ggplot() +
-  geom_sf(data = SF, fill = "lightgrey", color = "black") +  # Outline of Ethiopia with regions
+  geom_sf(data = SF4, fill = "lightgrey", color = "black") +  # Outline of Ethiopia with regions
   geom_sf(data = CV, color = "red", size = 0.25) +  # Health outposts
   theme_minimal() +
   labs(title = "Health Outposts in Ethiopia",
@@ -407,10 +439,17 @@ p4 <- ggplot() +
        y = "Latitude")
 
 #calculate how many amenities are in each region and plot this too
+count_outposts <- CV %>%
+  st_join(SF4, join = st_within) %>%
+  group_by(region) %>%
+  summarise(count = n(), .groups = 'drop')  
+SF4 <- SF4 %>% 
+  st_join(count_outposts, by = "region")
 
-p5 <- ggplot(data = count_outposts) +
+
+p5 <- ggplot(data = SF4) +
   geom_sf(aes(fill = count), color = "white") +
-  geom_sf_text(aes(label = region, geometry = centroid, color = "black"),
+  geom_sf_text(aes(label = region.x, geometry = centroid, color = "black"),
                size = 3,
                check_overlap = TRUE) +
   theme_void() +
@@ -420,8 +459,8 @@ p5 <- ggplot(data = count_outposts) +
   scale_color_identity() +
   labs(title = "Health Outposts by Region in Ethiopia (2016)",
        fill = "Number of Health Outposts")
-  
 
+ggsave(filename = "Health_Outposts_by_Region_Nigeria_2016.png", plot = p5)
 
 
   
