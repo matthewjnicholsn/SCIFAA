@@ -27,7 +27,6 @@ library(stringr)
 #read in data
 PR <- read_dta('/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETPR71DT/ETPR71FL.DTA') #load in household member microdata
 BR <- read_dta("/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETBR71DT/ETBR71FL.DTA") #load in birth microdata
-KR <- read_dta('/Users/matthewnicholson/SCIFAA/2016 ethiopia data DHS 7/ETKR71DT/ETKR71FL.DTA') #load in child microdata
 SF <- read_sf("/Users/matthewnicholson/SCIFAA/ethiopia shapefile regions/Eth_Region_2013.shp") #load in country shapefile with state-level data
 CV <- read_sf('/Users/matthewnicholson/SCIFAA/ethiopia health facilities/hotosm_eth_health_facilities_points_shp.shp') #load in shapefile of desired spatial covariate
 
@@ -269,12 +268,18 @@ ph_gini_results <- ph_gini_results %>%
   mutate(
     region = case_when(
       region == "benishangul" ~ "Beneshangul Gumu",
-      TRUE ~ str_to_title(region)  # Convert to title case
+      region == 'addis adaba' ~ 'Addis Ababa',
+      region == 'harari' ~ 'Hareri',
+      region == "snnpr" ~ "SNNPR",
+      region == 'afar' ~ 'Afar',
+      region == 'amhara' ~ 'Amhara',
+      region == 'dire dawa' ~ 'Dire Dawa',
+      region == 'gambela' ~ 'Gambela',
+      region == 'oromia' ~ 'Oromia',
+      region == 'somali' ~ 'Somali',
+      region == 'tigray' ~ 'Tigray'
     )
-  ) %>%
-  select(region, Gini) %>%
-  arrange(region) %>% 
-  filter(!row_number() %in% 8)
+  ) 
 
 write.xlsx(ph_gini_results, "GINI_by_region_Ethiopia_2016.xlsx", append=TRUE)
 
@@ -301,8 +306,6 @@ weighted_mean_by_region <- PR %>%
   )) 
 
 write.xlsx(weighted_mean_by_region, "Wealth_by_region_Ethiopia_2016.xlsx", append = TRUE)
-#tells us the code is done
-beep()
 ####################################################################################################################################################
 # Now that we have all of our statistics calculated and our shapefiles are loaded in,
 # we are going to make some maps! For this project, I want a map of wealth by region, a 
@@ -462,5 +465,26 @@ p5 <- ggplot(data = SF4) +
 
 ggsave(filename = "Health_Outposts_by_Region_Nigeria_2016.png", plot = p5)
 
+plot_wealth_by_region <- wealth_by_region %>% 
+  mutate(region = case_when(
+    region == "Tigray" ~ 1,
+    region == "Afar" ~ 2,
+    region == "Amhara" ~ 3,
+    region == "Oromia" ~ 4,
+    region == "Somali" ~ 5,
+    region == "Beneshangul Gumu" ~ 6,
+    region == "SNNPR" ~ 7,
+    region == "Gambela" ~ 8,
+    region == "Hareri" ~ 9,
+    region == "Addis Ababa" ~ 10,
+    region == "Dire Dawa" ~ 11,
+    TRUE ~ as.numeric(region)  
+  )) 
+plot(x = plot_wealth_by_region$region, y = plot_wealth_by_region$weighted_mean_wealth, 
+     xlab = "region",
+     ylab = "wealth",
+     xlim = c(1,11),
+     ylim = c(1,5),
+     main = "wealth by region")
 
-  
+beep()
